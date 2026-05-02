@@ -1,0 +1,11 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    volumes:
+      - ./evaluations.db:/app/evaluations.db   # persist SQLite
+      # Add later: - ./chroma_db:/app/chroma_db
+      
