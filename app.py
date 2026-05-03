@@ -84,49 +84,71 @@ _DEMO_MARKETS = pd.DataFrame([{
 }])
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_tags() -> list[dict]:
+    """Returns all Polymarket tags sorted alphabetically by label."""
+    try:
+        resp = requests.get(f"{POLYMARKET_GAMMA_BASE}/tags", timeout=10)
+        resp.raise_for_status()
+        tags = resp.json()
+        return sorted(tags, key=lambda t: t["label"].lower())
+    except requests.RequestException:
+        return []
+
+
+def _normalize_market(m: dict) -> dict:
+    try:
+        prices = json.loads(m.get("outcomePrices", "[0.5, 0.5]"))
+        yes_price = round(float(prices[0]) * 100, 1)
+    except (ValueError, IndexError):
+        yes_price = 50.0
+    return {
+        "id": m.get("conditionId") or m.get("slug"),
+        "title": m.get("question") or m.get("title", ""),
+        "description": m.get("description", ""),
+        "yes_price": yes_price,
+        "volume_24h": round(m.get("volume24hr") or 0),
+        "volume_total": round(m.get("volumeNum") or 0),
+        "end_date": m.get("endDateIso", ""),
+        "liquidity": round(m.get("liquidityNum") or 0),
+    }
+
+
 @st.cache_data(ttl=120, show_spinner=False)
-def fetch_markets(limit: int, sort: str, keyword: str) -> pd.DataFrame:
+def fetch_markets(limit: int, sort: str, keyword: str, tag_slug: str) -> pd.DataFrame:
     """
     Fetches active markets from the Polymarket Gamma API.
-    Returns a DataFrame with normalized fields. Falls back to demo data on error.
+    When a tag is selected, uses the /events endpoint (which supports tag filtering)
+    and flattens nested markets. Otherwise uses /markets directly.
 
     Docs: https://docs.polymarket.com/#gamma-markets-api
     """
+    
     try:
-        # When searching by keyword, fetch a larger pool since filtering is client-side
-        fetch_limit = 200 if keyword else limit
-        params = {
-            "active": "true",
-            "closed": "false",
-            "limit": fetch_limit,
-            "sort": sort,
-        }
-        resp = requests.get(f"{POLYMARKET_GAMMA_BASE}/markets", params=params, timeout=10)
-        resp.raise_for_status()
-        raw = resp.json()  # flat list of market objects
+        if tag_slug:
+            # Events endpoint supports tag_slug; markets are nested inside each event
+            params = {"active": "true", "closed": "false", "limit": limit, "sort": sort, "tag_slug": tag_slug}
+            resp = requests.get(f"{POLYMARKET_GAMMA_BASE}/events", params=params, timeout=10)
+            resp.raise_for_status()
+            raw_markets = [m for event in resp.json() for m in event.get("markets", [])]
+        else:
+            # Keyword search needs a bigger pool since filtering is client-side
+            fetch_limit = 200 if keyword else limit
+            params = {"active": "true", "closed": "false", "limit": fetch_limit, "sort": sort}
+            resp = requests.get(f"{POLYMARKET_GAMMA_BASE}/markets", params=params, timeout=10)
+            resp.raise_for_status()
+            raw_markets = resp.json()
 
         markets = []
-        for m in raw:
-            title = m.get("question") or m.get("title", "")
-            if keyword and keyword.lower() not in title.lower():
+        for m in raw_markets:
+            normalized = _normalize_market(m)
+            if keyword and keyword.lower() not in normalized["title"].lower():
                 continue
+            markets.append(normalized)
 
-            try:
-                prices = json.loads(m.get("outcomePrices", "[0.5, 0.5]"))
-                yes_price = round(float(prices[0]) * 100, 1)
-            except (ValueError, IndexError):
-                yes_price = 50.0
-
-            markets.append({
-                "id": m.get("conditionId") or m.get("slug"),
-                "title": title,
-                "description": m.get("description", ""),
-                "yes_price": yes_price,
-                "volume_24h": round(m.get("volume24hr") or 0),
-                "volume_total": round(m.get("volumeNum") or 0),
-                "end_date": m.get("endDateIso", ""),
-                "liquidity": round(m.get("liquidityNum") or 0),
-            })
+        # When using events endpoint, cap to the requested limit after flattening
+        if tag_slug:
+            markets = markets[:limit]
 
         return pd.DataFrame(markets) if markets else _DEMO_MARKETS
     except requests.RequestException as e:
@@ -186,7 +208,13 @@ Output valid JSON only:
 
 with st.sidebar:
     st.header("Market Filters")
-    limit = st.slider("Number of markets to fetch", min_value=5, max_value=50, value=20, step=5)
+
+    tags = fetch_tags()
+    tag_options = {"All categories": ""} | {t["label"].title(): t["slug"] for t in tags}
+    tag_label = st.selectbox("Category", list(tag_options.keys()))
+    tag_slug = tag_options[tag_label]
+
+    limit = st.slider("Number of markets", min_value=5, max_value=50, value=20, step=5)
     sort_label = st.selectbox("Sort by", list(SORT_OPTIONS.keys()))
     sort = SORT_OPTIONS[sort_label]
     keyword = st.text_input("Keyword filter", placeholder="e.g. bitcoin, trump, fed")
@@ -202,7 +230,7 @@ with col_left:
     st.subheader("Active Markets")
 
     with st.spinner("Loading markets..."):
-        markets_df = fetch_markets(limit=limit, sort=sort, keyword=keyword)
+        markets_df = fetch_markets(limit=limit, sort=sort, keyword=keyword, tag_slug=tag_slug)
 
     display_cols = ["title", "yes_price", "volume_24h", "end_date"]
     selection = st.dataframe(
