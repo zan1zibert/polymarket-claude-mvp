@@ -92,10 +92,12 @@ def fetch_markets(limit: int, sort: str, keyword: str) -> pd.DataFrame:
     Docs: https://docs.polymarket.com/#gamma-markets-api
     """
     try:
+        # When searching by keyword, fetch a larger pool since filtering is client-side
+        fetch_limit = 200 if keyword else limit
         params = {
             "active": "true",
             "closed": "false",
-            "limit": limit,
+            "limit": fetch_limit,
             "sort": sort,
         }
         resp = requests.get(f"{POLYMARKET_GAMMA_BASE}/markets", params=params, timeout=10)

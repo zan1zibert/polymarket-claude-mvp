@@ -4,9 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A single-page Streamlit app that fetches a configurable subset of active Polymarket prediction markets, sends them to Claude for probability evaluation, and persists results in SQLite. It notifies the user where it detects significant discrepancy of what it thinks the the probability should be and what Polymarket thinks it is.
-
 This is foremost a learning project. When developing always recommend and refer to tech docs, blogs and concepts that you think will benefit the author to read to really understand and verify that the project goes in the right direction.
+
+Polymarket prices = crowd wisdom + sharp money + liquidity effects.
+Claude (especially latest Sonnet/Opus) + real-time tools + RAG = strong independent forecaster that can synthesize news, polls, expert analysis, historical base rates, and resolution rules better than most humans on many events.
+The edge lives in calibrated discrepancies:
+
+Large gap between market price and Claude’s true-probability estimate
+High Claude confidence
+Sufficient liquidity (to avoid slippage)
+Reasonable time-to-resolution (to avoid capital lock-up)
 
 ## Running locally
 
@@ -27,19 +34,21 @@ The SQLite database (`evaluations.db`) is a directory on disk (Docker volume mou
 
 ## Architecture
 
-Consists of a :
+I’d build it as a LangGraph agentic workflow (or Polymarket’s official Agents framework) with these layers:
 
-1. Compenent that fetches relevant active markets
+Layer - Purpose
 
-2. Component that fetches internal knowledge base that is relevant for each market query
+1. Ingestion - Discover active markets, real-time prices, order books
 
-3. Component that sends an evaluation query to Claude
+2. Research & Context - Build rich context for each market
 
-4. Component that persists the final evaluation uses market_id as primary key, polymarket and internal prediction
+3. Prediction Engine - Output calibrated probability + confidence + reasoning
 
-5. Component that updates the knowledge base
+4. Discrepancy Engine - Rank +EV opportunities
 
-6. UI for configuring relevant active markets and notifies the user of potential lucrative oppotunities
+5. Persistence & Loop - Store every evaluation + eventual resolution for continuous improvement
+
+6. UI / Alerts - Human oversight + notifications
 
 
 ## Deployment
