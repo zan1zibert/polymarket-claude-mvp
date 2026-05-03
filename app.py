@@ -75,6 +75,7 @@ SORT_OPTIONS = {
 _DEMO_MARKETS = pd.DataFrame([{
     "id": "demo1",
     "title": "Demo: Will BTC hit 100k in 2026?",
+    "description": "",
     "yes_price": 55.0,
     "volume_24h": 0,
     "volume_total": 0,
@@ -119,6 +120,7 @@ def fetch_markets(limit: int, sort: str, keyword: str) -> pd.DataFrame:
             markets.append({
                 "id": m.get("conditionId") or m.get("slug"),
                 "title": title,
+                "description": m.get("description", ""),
                 "yes_price": yes_price,
                 "volume_24h": round(m.get("volume24hr") or 0),
                 "volume_total": round(m.get("volumeNum") or 0),
@@ -138,10 +140,13 @@ client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
 
 def run_claude_evaluation(market):
+    description = market.get("description", "").strip()
+    description_block = f"\nResolution criteria:\n{description}" if description else ""
+
     prompt = f"""You are a sharp prediction market trader. Analyze this market:
 
 Title: {market['title']}
-Current Yes price: {market['yes_price']:.1f}¢
+Current Yes price: {market['yes_price']:.1f}¢{description_block}
 
 Output valid JSON only:
 {{
