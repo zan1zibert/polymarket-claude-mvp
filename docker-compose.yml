@@ -6,6 +6,5 @@ services:
     env_file:
       - .env
     volumes:
-      - ./evaluations.db:/app/evaluations.db   # persist SQLite
-      # Add later: - ./chroma_db:/app/chroma_db
+      - ./data:/app/data   # persist SQLite and future vector DB
       

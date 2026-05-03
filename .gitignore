@@ -1,7 +1,6 @@
 .env
 __pycache__/
 *.pyc
-evaluations.db
-chroma_db/
+data/
 .DS_Store
 .streamlit/secrets.toml
