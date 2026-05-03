@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 import json
+import re
 from datetime import datetime
 import sqlite3
 import pandas as pd
@@ -49,7 +50,7 @@ def save_evaluation(data: dict):
         VALUES (?, ?, ?, ?, ?, ?, ?)
     """, (
         data["market_id"], data["timestamp"], data["title"],
-        data["yes_price"], data["prob_yes"], data["confidence"], data["reasoning"]
+        data["yes_price"], data["claude_prob_yes"], data["confidence"], data["reasoning"]
     ))
     conn.commit()
     conn.close()
@@ -154,13 +155,18 @@ Output valid JSON only:
         messages=[{"role": "user", "content": prompt}]
     )
     try:
-        parsed = json.loads(response.content[0].text)
+        raw_text = response.content[0].text
+        # Extract the JSON object even if Claude wraps it in markdown code fences
+        match = re.search(r"\{.*\}", raw_text, re.DOTALL)
+        if not match:
+            raise ValueError(f"No JSON object found in response:\n{raw_text}")
+        parsed = json.loads(match.group())
         return {
             "market_id": market["id"],
             "timestamp": datetime.now().isoformat(),
             "title": market["title"],
             "yes_price": market["yes_price"],
-            "prob_yes": parsed["probability_yes"],
+            "claude_prob_yes": parsed["probability_yes"],
             "confidence": parsed["confidence"],
             "reasoning": parsed["reasoning"]
         }
