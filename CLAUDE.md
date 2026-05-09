@@ -32,12 +32,37 @@ This is foremost a learning project. When developing, always recommend and refer
 
 Each phase is one isolated change so the P&L delta cleanly attributes improvement.
 
+## Market selection criteria
+
+Not all markets are worth betting on. Apply these filters when selecting markets for a phase:
+
+- `end_date` between 2–7 days from now (fast feedback, enough time to "bet")
+- `liquidity` > $5,000 (thin markets have unreliable prices)
+- `yes_price` between 10¢ and 90¢ (extremes have little room for edge)
+- Binary only (Yes/No outcomes) — multi-outcome markets excluded
+- `abs(claude_prob - yes_price) >= 10%` — only bet where there is meaningful edge
+
 ## Bet simulation logic
 
-- **Selection**: markets where `abs(claude_prob - market_price) >= 10%` and `end_date <= today + 7 days`
 - **Direction**: bet Yes if Claude is above market, No if below
 - **Size**: flat $10 per bet (keeps signal clean, separates model quality from bet sizing)
 - **P&L**: `(outcome * (1 - entry_price) - (1 - outcome) * entry_price) * bet_size`
+
+## Segment analysis
+
+After each phase resolves, analyse performance across these dimensions to find Claude's systematic biases. Use findings to debias the prompt in the next phase.
+
+| Segment | What to look for |
+|---|---|
+| By tag (politics, crypto, sports, etc.) | Domain-specific over/underestimation |
+| By confidence level | Does high confidence actually predict accuracy? |
+| By edge size | Are big edges real signal or overconfidence? |
+| By liquidity bucket | Does Claude do better on thin vs efficient markets? |
+| By phase | Core comparison — did added complexity help? |
+
+**Calibration** is the key metric: if Claude says 70% on 20 markets, ~14 should resolve Yes. The standard measure is **Brier score** (lower = better). Read: [Brier score explainer](https://en.wikipedia.org/wiki/Brier_score) and Tetlock's *Superforecasting* for the conceptual foundation.
+
+The actionable loop: find a systematic bias (e.g. "Claude overestimates crypto by 15%"), encode a correction into the next phase's prompt, measure if Brier score improves.
 
 ## SQLite schema (`data/evaluations.db`)
 
